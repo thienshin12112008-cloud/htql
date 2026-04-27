@@ -2,8 +2,8 @@
 if (sessionStorage.getItem('auth') !== 'admin') location.href = 'login.html';
 
 // ===== ROUTER =====
-const pages = { dashboard, students, classes, tuition, receipts, discounts, history };
-const pageTitles = { dashboard:'Dashboard', students:'Qu\u1ea3n L\u00fd H\u1ecdc Vi\u00ean', classes:'Qu\u1ea3n L\u00fd L\u1edbp H\u1ecdc', tuition:'Qu\u1ea3n L\u00fd H\u1ecdc Ph\u00ed', receipts:'Bi\u00ean Lai \u0110\u0103ng K\u00fd', discounts:'M\u00e3 Gi\u1ea3m Gi\u00e1', history:'L\u1ecbch S\u1eed H\u1ecdc T\u1eadp' };
+const pages = { dashboard, students, classes, tuition, receipts, discounts };
+const pageTitles = { dashboard:'Dashboard', students:'Qu\u1ea3n L\u00fd H\u1ecdc Vi\u00ean', classes:'Qu\u1ea3n L\u00fd L\u1edbp H\u1ecdc', tuition:'Qu\u1ea3n L\u00fd H\u1ecdc Ph\u00ed', receipts:'Bi\u00ean Lai \u0110\u0103ng K\u00fd', discounts:'M\u00e3 Gi\u1ea3m Gi\u00e1' };
 
 function navigate(page) {
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.page === page));
@@ -37,8 +37,12 @@ setInterval(updateClock, 1000);
 function openModal(title, bodyHTML, onConfirm) {
   document.getElementById('modalTitle').textContent = title;
   document.getElementById('modalBody').innerHTML = bodyHTML;
+  const btn = document.getElementById('modalConfirm');
+  btn.style.display = '';
+  btn.innerHTML = 'L\u01b0u';
+  btn.className = 'btn btn-primary';
+  btn.onclick = () => { if(onConfirm()) closeModal(); };
   document.getElementById('modalOverlay').classList.add('open');
-  document.getElementById('modalConfirm').onclick = () => { if(onConfirm()) closeModal(); };
 }
 function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
 document.getElementById('modalClose').onclick = closeModal;
@@ -169,6 +173,9 @@ function students() {
       </div>
       <div class="toolbar">
         <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Tìm theo tên, mã, SĐT..." id="searchStudent" value="${filter}"/></div>
+        <button class="btn btn-success" id="btnExportExcel"><i class="fas fa-file-excel"></i> Xu&#7845;t Excel</button>
+        <label class="btn btn-info" style="cursor:pointer"><i class="fas fa-upload"></i> Nh&#7853;p Excel/CSV<input type="file" id="importExcel" accept=".xlsx,.xls,.csv" style="display:none"/></label>
+        <button class="btn btn-secondary" id="btnDownloadTemplate"><i class="fas fa-download"></i> T&#7843;i file m&#7851;u</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -189,15 +196,46 @@ function students() {
     </div>`;
     document.getElementById('btnAddStudent').onclick = () => addStudentModal();
     document.getElementById('searchStudent').oninput = e => { filter = e.target.value.toLowerCase(); render(); };
+    document.getElementById('btnExportExcel').onclick = () => exportStudentsExcel();
+    document.getElementById('importExcel').onchange = e => importStudentsExcel(e);
+    document.getElementById('btnDownloadTemplate').onclick = () => downloadTemplate();
   }
   render();
 
   window.viewStudent = (id) => {
     const s = DB.students.find(x=>x.id===id);
-    openModal('Chi tiết học viên – ' + s.name, `
-      <div class="form-grid">
-        ${[['Mã học viên',s.id],['Họ và tên',s.name],['SĐT',s.phone],['Gmail',s.email||'—'],['Lớp TT',getClassById(s.centerClass)?.name||'—'],['Ngày bắt đầu khóa',formatDate(getClassById(s.centerClass)?.startDate)],['Ngày kết thúc khóa',formatDate(getClassById(s.centerClass)?.endDate)],['Học phí',formatCurrency(getClassById(s.centerClass)?.fee||0)],['Ghi chú',s.note||'—']].map(([l,v])=>`<div class="form-group"><label>${l}</label><input readonly value="${v}"/></div>`).join('')}
-      </div>`, () => true);
+    const regHistory = DB.receipts.filter(r => r.studentId === id);
+    const historyHTML = regHistory.length === 0
+      ? `<div style="text-align:center;padding:20px;color:#94a3b8"><i class="fas fa-inbox" style="font-size:1.5rem;display:block;margin-bottom:6px"></i>Ch\u01b0a \u0111\u0103ng k\u00fd kh\u00f3a n\u00e0o</div>`
+      : `<div class="table-wrap"><table>
+          <thead><tr><th>M\u00e3 BL</th><th>L\u1edbp</th><th>Ng\u00e0y \u0111\u0103ng k\u00fd</th><th>H\u1ecdc ph\u00ed</th><th>M\u00e3 gi\u1ea3m</th><th>Tr\u1ea1ng th\u00e1i</th></tr></thead>
+          <tbody>${regHistory.map(r=>{
+            const cl = getClassById(r.classId);
+            const now = new Date(); now.setHours(0,0,0,0);
+            const end = cl?.endDate ? new Date(cl.endDate) : null;
+            const start = cl?.startDate ? new Date(cl.startDate) : null;
+            let status, badge;
+            if (!end) { status='\u0110ang h\u1ecdc'; badge='badge-info'; }
+            else if (end < now) { status='\u0110\u00e3 h\u1ecdc xong'; badge='badge-success'; }
+            else if (start && start > now) { status='Ch\u01b0a b\u1eaft \u0111\u1ea7u'; badge='badge-warning'; }
+            else { status='\u0110ang h\u1ecdc'; badge='badge-info'; }
+            return `<tr>
+              <td><b>${r.id}</b></td>
+              <td>${cl?.name||r.classId}</td>
+              <td>${formatDate(r.date)}</td>
+              <td style="color:#10b981;font-weight:700">${formatCurrency(r.amount)}</td>
+              <td>${r.discountCode?`<span class="badge badge-primary">${r.discountCode}</span>`:'—'}</td>
+              <td><span class="badge ${badge}">${status}</span></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
+
+    openModal('Chi ti\u1ebft h\u1ecdc vi\u00ean \u2013 ' + s.name, `
+      <div class="form-grid" style="margin-bottom:20px">
+        ${[['M\u00e3 h\u1ecdc vi\u00ean',s.id],['H\u1ecd v\u00e0 t\u00ean',s.name],['S\u0110T',s.phone||'—'],['Gmail',s.email||'—'],['L\u1edbp hi\u1ec7n t\u1ea1i',getClassById(s.centerClass)?.name||'—'],['Ng\u00e0y b\u1eaft \u0111\u1ea7u',formatDate(getClassById(s.centerClass)?.startDate)],['Ng\u00e0y k\u1ebft th\u00fac',formatDate(getClassById(s.centerClass)?.endDate)],['H\u1ecdc ph\u00ed',formatCurrency(getClassById(s.centerClass)?.fee||0)],['Ghi ch\u00fa',s.note||'—']].map(([l,v])=>`<div class="form-group"><label>${l}</label><input readonly value="${v}"/></div>`).join('')}
+      </div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:10px;font-size:.95rem"><i class="fas fa-history" style="color:var(--primary)"></i> L\u1ecbch s\u1eed \u0111\u0103ng k\u00fd (${regHistory.length} kh\u00f3a)</div>
+      ${historyHTML}`, () => true);
     document.getElementById('modalConfirm').style.display='none';
   };
 
@@ -278,7 +316,7 @@ function classes() {
           <thead><tr><th>Mã lớp</th><th>Tên lớp</th><th>Bắt đầu</th><th>Kết thúc</th><th>Học phí</th><th>Thao tác</th></tr></thead>
           <tbody>
           ${DB.classes.map(cl=>`<tr>
-            <td><b>${cl.id}</b></td><td>${cl.name}</td>
+            <td><b>${cl.id}</b></td><td><a href="#" style="color:var(--primary);font-weight:700;text-decoration:none" onclick="viewClassStudents('${cl.id}')">${cl.name}</a></td>
             <td>${formatDate(cl.startDate)}</td><td>${formatDate(cl.endDate)}</td>
             <td style="color:#10b981;font-weight:700">${formatCurrency(cl.fee||0)}</td>
             <td><div class="action-btns">
@@ -298,15 +336,25 @@ function classes() {
   window.viewClassStudents = (id) => {
     const cl = getClassById(id);
     const list = getStudentsByClass(id);
-    openModal(`Danh sách học viên – ${cl.name}`, `
-      <div style="margin-bottom:12px;display:flex;gap:10px;align-items:center">
-        <span class="badge badge-primary">${list.length} học viên</span>
-        <button class="btn btn-warning btn-sm" onclick="transferStudentModal('${id}')"><i class="fas fa-exchange-alt"></i> Chuyển lớp</button>
+    openModal(`${cl.name} – ${list.length} h\u1ecdc vi\u00ean`, `
+      <div style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+        <span class="badge badge-primary"><i class="fas fa-users"></i> ${list.length} h\u1ecdc vi\u00ean</span>
+        <span class="badge badge-info"><i class="fas fa-calendar"></i> ${formatDate(cl.startDate)} \u2192 ${formatDate(cl.endDate)}</span>
+        <span class="badge badge-success"><i class="fas fa-coins"></i> ${formatCurrency(cl.fee||0)}</span>
+        <button class="btn btn-warning btn-sm" onclick="transferStudentModal('${id}')"><i class="fas fa-exchange-alt"></i> Chuy\u1ec3n l\u1edbp</button>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Mã HV</th><th>Họ tên</th><th>SĐT</th><th>Tình trạng</th></tr></thead>
-        <tbody>${list.map(s=>`<tr><td>${s.id}</td><td>${s.name}</td><td>${s.phone}</td><td><span class="badge ${s.status==='Đang học'?'badge-success':'badge-danger'}">${s.status}</span></td></tr>`).join('')}</tbody>
-      </table></div>`, () => true);
+      ${list.length === 0
+        ? `<div style="text-align:center;padding:32px;color:#94a3b8"><i class="fas fa-user-slash" style="font-size:2rem;margin-bottom:8px;display:block"></i>Ch\u01b0a c\u00f3 h\u1ecdc vi\u00ean n\u00e0o trong l\u1edbp n\u00e0y</div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr><th>M\u00e3 HV</th><th>H\u1ecd t\u00ean</th><th>S\u0110T</th><th>Gmail</th></tr></thead>
+            <tbody>${list.map(s=>`<tr>
+              <td><b>${s.id}</b></td>
+              <td>${s.name}</td>
+              <td>${s.phone||'—'}</td>
+              <td>${s.email||'—'}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>`
+      }`, () => true);
     document.getElementById('modalConfirm').style.display='none';
   };
 
@@ -443,22 +491,31 @@ function receipts() {
   window.previewReceipt = (id) => {
     const r = DB.receipts.find(x=>x.id===id);
     const cl = getClassById(r.classId);
-    openModal('Biên Lai Đăng Ký', `
+    const s = DB.students.find(x=>x.id===r.studentId);
+    // Tính đợt đăng ký: đếm số biên lai cùng học viên + lớp, sắp xếp theo ngày
+    const sameClassReceipts = DB.receipts
+      .filter(x => x.studentId===r.studentId && x.classId===r.classId)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    const dotDangKy = sameClassReceipts.findIndex(x=>x.id===r.id) + 1;
+    openModal('Bi\u00ean Lai \u0110\u0103ng K\u00fd', `
       <div class="receipt-preview">
-        <div class="receipt-title">DUY HOÀNG DẠY TOÁN</div>
-        <div class="receipt-sub">Quản lý dễ dàng – Vận hành chuyên nghiệp</div>
+        <div class="receipt-title">DUY HO\u00c0NG D\u1ea0Y TO\u00c1N</div>
+        <div class="receipt-sub">Qu\u1ea3n l\u00fd d\u1ec5 d\u00e0ng \u2013 V\u1eadn h\u00e0nh chuy\u00ean nghi\u1ec7p</div>
         ${[
-          ['Mã biên lai', r.id],
-          ['Ngày tạo', formatDate(r.date)],
-          ['Tên học viên', r.studentName],
-          ['Mã học viên', r.studentId],
-          ['Lớp đăng ký', cl?.name||r.classId],
-          ['Thời hạn', cl?.startDate ? formatDate(cl.startDate)+' → '+formatDate(cl.endDate) : '—'],
-          ['Ghi chú', r.note||'—']
+          ['M\u00e3 bi\u00ean lai', r.id],
+          ['\u0110\u0103ng k\u00fd', `\u0110\u1ee3t ${dotDangKy}`],
+          ['Ng\u00e0y t\u1ea1o', formatDate(r.date)],
+          ['T\u00ean h\u1ecdc vi\u00ean', r.studentName],
+          ['M\u00e3 h\u1ecdc vi\u00ean', r.studentId],
+          ['Gmail', s?.email||'—'],
+          ['L\u1edbp \u0111\u0103ng k\u00fd', cl?.name||r.classId],
+          ['Th\u1eddi h\u1ea1n', cl?.startDate ? formatDate(cl.startDate)+' \u2192 '+formatDate(cl.endDate) : '—'],
+          ['M\u00e3 gi\u1ea3m gi\u00e1', r.discountCode||'—'],
+          ['Ghi ch\u00fa', r.note||'—']
         ].map(([l,v])=>`<div class="receipt-row"><span>${l}:</span><b>${v}</b></div>`).join('')}
-        <div class="receipt-total">Học phí: ${formatCurrency(r.amount)}</div>
+        <div class="receipt-total">H\u1ecdc ph\u00ed: ${formatCurrency(r.amount)}</div>
       </div>`, () => { window.print(); return true; });
-    document.getElementById('modalConfirm').innerHTML = '<i class="fas fa-print"></i> In biên lai';
+    document.getElementById('modalConfirm').innerHTML = '<i class="fas fa-print"></i> In bi\u00ean lai';
   };
 
   window.deleteReceipt = (id) => {
@@ -471,14 +528,61 @@ function receipts() {
   function addReceiptModal() {
     const firstFee = DB.classes[0]?.fee || 0;
     openModal('T\u1ea1o bi\u00ean lai \u0111\u0103ng k\u00fd', `
-      <div class="form-grid">
-        <div class="form-group"><label>H\u1ecdc vi\u00ean *</label><select id="r_student">${DB.students.map(s=>`<option value="${s.id}">${s.name} (${s.id})</option>`).join('')}</select></div>
-        <div class="form-group"><label>L\u1edbp \u0111\u0103ng k\u00fd *</label><select id="r_class" onchange="updateReceiptFee()">${DB.classes.map(cl=>`<option value="${cl.id}" data-fee="${cl.fee||0}">${cl.name}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Ng\u00e0y t\u1ea1o</label><input type="date" id="r_date" value="${new Date().toISOString().split('T')[0]}"/></div>
-        <div class="form-group"><label>H\u1ecdc ph\u00ed g\u1ed1c</label><input type="number" id="r_fee_original" value="${firstFee}" readonly style="background:#f1f5f9;color:#64748b"/></div>
-        <div class="form-group"><label>M\u00e3 gi\u1ea3m gi\u00e1</label><input id="r_discount_code" placeholder="Nh\u1eadp m\u00e3..." oninput="updateReceiptFee()" style="text-transform:uppercase"/></div>
-        <div class="form-group"><label>H\u1ecdc ph\u00ed sau gi\u1ea3m</label><input type="number" id="r_amount" value="${firstFee}" readonly style="background:#f1f5f9;color:#10b981;font-weight:700"/></div>
-        <div class="form-group" style="grid-column:1/-1"><label>Ghi ch\u00fa</label><input id="r_note"/></div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <div style="background:linear-gradient(135deg,rgba(79,70,229,.06),rgba(124,58,237,.06));border-radius:12px;padding:16px 18px;border:1px solid rgba(79,70,229,.12)">
+          <div style="font-size:.8rem;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px"><i class="fas fa-user-graduate"></i> H\u1ecdc vi\u00ean</div>
+          <input id="r_student_search" placeholder="\ud83d\udd0d T\u00ecm theo t\u00ean, m\u00e3, s\u0111t..." oninput="filterReceiptStudents()"
+            style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;outline:none;margin-bottom:8px;transition:.2s"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"/>
+          <select id="r_student" onchange="checkStudentHistory();autoSelectClass()" size="4"
+            style="width:100%;border-radius:8px;border:1.5px solid var(--border);padding:4px;font-size:.9rem;outline:none">
+            ${DB.students.map(s=>`<option value="${s.id}">${s.name} \u2013 ${s.phone||s.id}</option>`).join('')}
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group"><label>L\u1edbp \u0111\u0103ng k\u00fd *</label>
+            <select id="r_class" onchange="updateReceiptFee();checkStudentHistory()"
+              style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none">
+              ${DB.classes.map(cl=>`<option value="${cl.id}" data-fee="${cl.fee||0}">${cl.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label>Ng\u00e0y t\u1ea1o</label>
+            <input type="date" id="r_date" value="${new Date().toISOString().split('T')[0]}"
+              style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none"/>
+          </div>
+        </div>
+
+        <div id="r_history_warn" style="display:none;background:#fef9c3;border:1px solid #fde047;border-radius:10px;padding:10px 14px;font-size:.85rem;color:#854d0e">
+          <i class="fas fa-exclamation-triangle"></i> <span id="r_history_text"></span>
+        </div>
+
+        <div style="background:#f8fafc;border-radius:12px;padding:16px 18px;border:1px solid var(--border)">
+          <div style="font-size:.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px"><i class="fas fa-coins"></i> H\u1ecdc ph\u00ed</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>H\u1ecdc ph\u00ed g\u1ed1c</label>
+              <input type="number" id="r_fee_original" value="${firstFee}" readonly
+                style="background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;color:#64748b"/>
+            </div>
+            <div class="form-group"><label>M\u00e3 gi\u1ea3m gi\u00e1</label>
+              <input id="r_discount_code" placeholder="Nh\u1eadp m\u00e3..." oninput="updateReceiptFee()"
+                style="text-transform:uppercase;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none;transition:.2s"
+                onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"/>
+            </div>
+          </div>
+          <div style="margin-top:10px;background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(16,185,129,.04));border:1.5px solid rgba(16,185,129,.2);border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:600;color:var(--text-muted)">T\u1ed5ng h\u1ecdc ph\u00ed</span>
+            <span id="r_amount_display" style="font-size:1.2rem;font-weight:800;color:#10b981">${Number(firstFee).toLocaleString('vi-VN')} VN\u0110</span>
+            <input type="number" id="r_amount" value="${firstFee}" readonly style="display:none"/>
+          </div>
+        </div>
+
+        <div class="form-group"><label>Ghi ch\u00fa</label>
+          <input id="r_note" placeholder="Ghi ch\u00fa th\u00eam n\u1ebfu c\u00f3..."
+            style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none;transition:.2s"
+            onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"/>
+        </div>
       </div>`, () => {
       const sid = document.getElementById('r_student').value;
       const cid = document.getElementById('r_class').value;
@@ -494,7 +598,45 @@ function receipts() {
       DB.receipts.push({ id: genId('BL',DB.receipts), date: document.getElementById('r_date').value, studentName: s.name, studentId: sid, classId: cid, amount: amt, discountCode: dcode||null, note: document.getElementById('r_note').value });
       toast('T\u1ea1o bi\u00ean lai th\u00e0nh c\u00f4ng!'); render(); return true;
     });
+    setTimeout(() => autoSelectClass(), 50);
   }
+
+  window.filterReceiptStudents = () => {
+    const q = document.getElementById('r_student_search').value.toLowerCase();
+    const sel = document.getElementById('r_student');
+    sel.innerHTML = DB.students
+      .filter(s => !q || s.name.toLowerCase().includes(q) || (s.phone||'').includes(q) || s.id.toLowerCase().includes(q))
+      .map(s=>`<option value="${s.id}">${s.name} – ${s.phone||s.id}</option>`).join('');
+    if (sel.options.length) { sel.selectedIndex = 0; autoSelectClass(); }
+  };
+
+  window.autoSelectClass = () => {
+    const sid = document.getElementById('r_student')?.value;
+    const s = DB.students.find(x=>x.id===sid);
+    if (!s || !s.centerClass) return;
+    const sel = document.getElementById('r_class');
+    if (!sel) return;
+    sel.value = s.centerClass;
+    updateReceiptFee();
+    checkStudentHistory();
+  };
+
+  window.checkStudentHistory = () => {
+    const sid = document.getElementById('r_student')?.value;
+    const cid = document.getElementById('r_class')?.value;
+    const warn = document.getElementById('r_history_warn');
+    const text = document.getElementById('r_history_text');
+    if (!sid || !cid || !warn) return;
+    const oldReceipt = DB.receipts.find(r => r.studentId===sid && r.classId===cid);
+    const s = DB.students.find(x=>x.id===sid);
+    const cl = getClassById(cid);
+    if (oldReceipt) {
+      text.textContent = `${s?.name} \u0111\u00e3 c\u00f3 bi\u00ean lai \u0111\u0103ng k\u00fd l\u1edbp "${cl?.name}" ng\u00e0y ${formatDate(oldReceipt.date)}. B\u1ea1n v\u1eabn c\u00f3 th\u1ec3 ti\u1ebfp t\u1ee5c t\u1ea1o m\u1edbi.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+  };
 
   window.updateReceiptFee = () => {
     const sel = document.getElementById('r_class');
@@ -505,6 +647,8 @@ function receipts() {
     let final = fee;
     if (disc) { final = disc.type==='percent' ? Math.round(fee*(1-disc.value/100)) : Math.max(0, fee-disc.value); }
     document.getElementById('r_amount').value = final;
+    const disp = document.getElementById('r_amount_display');
+    if (disp) disp.textContent = Number(final).toLocaleString('vi-VN') + ' VN\u0110';
   };
 }
 
@@ -609,55 +753,79 @@ function discounts() {
   }
 }
 
-// ===== PAGE: HISTORY =====
-function history() {
-  const c = document.getElementById('mainContent');
+// ===== EXPORT EXCEL =====
+function downloadTemplate() {
+  const csv = '\uFEFFH\u1ecd v\u00e0 T\u00ean,S\u1ed1 \u0110i\u1ec7n Tho\u1ea1i,Gmail,L\u1edbp,Ghi Ch\u00fa\nNguy\u1ec5n V\u0103n A,0901234567,example@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,\nTr\u1ea7n Th\u1ecb B,0912345678,example2@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,Ghi ch\u00fa n\u1ebfu c\u00f3';
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'MauNhapHocVien.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('T\u1ea3i file m\u1eabu th\u00e0nh c\u00f4ng!');
+}
 
-  function render() {
-    c.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title"><i class="fas fa-history"></i> Lịch Sử Học Tập</div>
-        <button class="btn btn-primary" id="btnAddHistory"><i class="fas fa-plus"></i> Thêm lịch sử</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Học viên</th><th>Mã HV</th><th>Lớp đã học</th><th>Bắt đầu</th><th>Kết thúc</th><th>Kết quả</th><th>Nhận xét GV</th><th>Hoàn thành</th></tr></thead>
-          <tbody>
-          ${DB.history.map(h=>`<tr>
-            <td>${h.studentName}</td><td>${h.studentId}</td><td>${h.className}</td>
-            <td>${formatDate(h.start)}</td><td>${formatDate(h.end)}</td>
-            <td><span class="badge ${h.result==='Xuất sắc'?'badge-primary':h.result==='Giỏi'?'badge-success':h.result==='Khá'?'badge-info':'badge-warning'}">${h.result}</span></td>
-            <td style="max-width:200px;font-size:.82rem">${h.comment}</td>
-            <td><span class="badge ${h.completed?'badge-success':'badge-warning'}">${h.completed?'Hoàn thành':'Đang học'}</span></td>
-          </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-    document.getElementById('btnAddHistory').onclick = () => addHistoryModal();
-  }
-  render();
+function exportStudentsExcel() {
+  if (!DB.students.length) { toast('Kh\u00f4ng c\u00f3 d\u1eef li\u1ec7u \u0111\u1ec3 xu\u1ea5t!', 'warning'); return; }
+  const rows = DB.students.map(s => ({
+    'M\u00e3 H\u1ecdc Vi\u00ean': s.id,
+    'H\u1ecd v\u00e0 T\u00ean': s.name,
+    'S\u1ed1 \u0110i\u1ec7n Tho\u1ea1i': s.phone || '',
+    'Gmail': s.email || '',
+    'L\u1edbp': getClassById(s.centerClass)?.name || s.centerClass || '',
+    'Ghi Ch\u00fa': s.note || ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Danh s\u00e1ch h\u1ecdc vi\u00ean');
+  ws['!cols'] = [20,30,18,30,20,30].map(w=>({wch:w}));
+  XLSX.writeFile(wb, 'DanhSachHocVien.xlsx');
+  toast('Xu\u1ea5t Excel th\u00e0nh c\u00f4ng!');
+}
 
-  function addHistoryModal() {
-    openModal('Thêm lịch sử học tập', `
-      <div class="form-grid">
-        <div class="form-group"><label>Học viên *</label><select id="h_student">${DB.students.map(s=>`<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Lớp học</label><select id="h_class">${DB.classes.map(cl=>`<option value="${cl.id}">${cl.name}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Ngày bắt đầu</label><input type="date" id="h_start"/></div>
-        <div class="form-group"><label>Ngày kết thúc</label><input type="date" id="h_end"/></div>
-        <div class="form-group"><label>Kết quả</label><select id="h_result"><option>Xuất sắc</option><option>Giỏi</option><option>Khá</option><option>Trung bình</option></select></div>
-        <div class="form-group"><label>Hoàn thành</label><select id="h_done"><option value="1">Hoàn thành</option><option value="0">Đang học</option></select></div>
-        <div class="form-group" style="grid-column:1/-1"><label>Nhận xét giáo viên</label><textarea id="h_comment"></textarea></div>
-      </div>`, () => {
-      const sid = document.getElementById('h_student').value;
-      const cid = document.getElementById('h_class').value;
-      const s = DB.students.find(x=>x.id===sid);
-      const cl = getClassById(cid);
-      DB.history.push({ studentId: sid, studentName: s.name, classId: cid, className: cl.name, start: document.getElementById('h_start').value, end: document.getElementById('h_end').value, result: document.getElementById('h_result').value, comment: document.getElementById('h_comment').value, completed: document.getElementById('h_done').value==='1' });
-      toast('Đã thêm lịch sử!'); render(); return true;
-    });
-  }
+function importStudentsExcel(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const isCsv = file.name.endsWith('.csv');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      let rows = [];
+      if (isCsv) {
+        const lines = ev.target.result.replace(/^\uFEFF/,'').split('\n').filter(l=>l.trim());
+        const headers = lines[0].split(',').map(h=>h.trim());
+        rows = lines.slice(1).map(line => {
+          const vals = line.split(',');
+          const obj = {};
+          headers.forEach((h,i) => obj[h] = (vals[i]||'').trim());
+          return obj;
+        });
+      } else {
+        const wb = XLSX.read(ev.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws);
+      }
+      let added = 0, skipped = 0;
+      rows.forEach(r => {
+        const name = r['H\u1ecd v\u00e0 T\u00ean'] || r['Ho va Ten'] || r['name'] || '';
+        if (!name) { skipped++; return; }
+        const phone = String(r['S\u1ed1 \u0110i\u1ec7n Tho\u1ea1i'] || r['SDT'] || r['phone'] || '');
+        const email = r['Gmail'] || r['email'] || '';
+        const note  = r['Ghi Ch\u00fa'] || r['note'] || '';
+        const className = r['L\u1edbp'] || r['Lop'] || r['class'] || '';
+        const cl = DB.classes.find(c => c.name === className);
+        const centerClass = cl ? cl.id : (DB.classes[0]?.id || '');
+        const id = genStudentId(name, centerClass);
+        DB.students.push({ id, name, phone, email, centerClass, note });
+        added++;
+      });
+      saveDB();
+      toast(`Nh\u1eadp th\u00e0nh c\u00f4ng ${added} h\u1ecdc vi\u00ean${skipped?' (b\u1ecf qua '+skipped+' d\u00f2ng l\u1ed7i)':''}!`);
+      navigate('students');
+    } catch(err) { toast('File kh\u00f4ng h\u1ee3p l\u1ec7!', 'error'); }
+    e.target.value = '';
+  };
+  isCsv ? reader.readAsText(file, 'UTF-8') : reader.readAsBinaryString(file);
 }
 
 // ===== INIT =====

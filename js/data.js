@@ -8,9 +8,8 @@ function loadDB() {
       const parsed = JSON.parse(saved);
       DB.students = parsed.students || [];
       DB.classes  = parsed.classes  || [];
-      DB.receipts = parsed.receipts || [];
+      DB.receipts  = parsed.receipts  || [];
       DB.discounts = parsed.discounts || [];
-      DB.history  = parsed.history  || [];
     }
   } catch(e) { console.error('Load DB error:', e); }
 }
@@ -25,8 +24,7 @@ const DB = {
   students: [],
   classes: [],
   receipts: [],
-  discounts: [],
-  history: []
+  discounts: []
 };
 
 // ===== HELPERS =====
