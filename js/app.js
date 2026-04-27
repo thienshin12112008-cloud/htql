@@ -755,8 +755,7 @@ function discounts() {
 
 // ===== EXPORT EXCEL =====
 function downloadTemplate() {
-  const csv = '\uFEFFH\u1ecd v\u00e0 T\u00ean,S\u1ed1 \u0110i\u1ec7n Tho\u1ea1i,Gmail,L\u1edbp,Ghi Ch\u00fa\nNguy\u1ec5n V\u0103n A,0901234567,example@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,\nTr\u1ea7n Th\u1ecb B,0912345678,example2@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,Ghi ch\u00fa n\u1ebfu c\u00f3';
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const csv = '\uFEFFH\u1ecd v\u00e0 T\u00ean,S\u1ed1 \u0110i\u1ec7n Tho\u1ea1i,Gmail,L\u1edbp,Ghi Ch\u00fa\nNguy\u1ec5n V\u0103n A,0901234567,example@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,\nTr\u1ea7n Th\u1ecb B,0912345678,example2@gmail.com,T\u00ean l\u1edbp \u0111\u00fang trong h\u1ec7 th\u1ed1ng,Ghi ch\u00fa n\u1ebfu c\u00f3';  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'MauNhapHocVien.csv';
@@ -767,6 +766,7 @@ function downloadTemplate() {
 
 function exportStudentsExcel() {
   if (!DB.students.length) { toast('Kh\u00f4ng c\u00f3 d\u1eef li\u1ec7u \u0111\u1ec3 xu\u1ea5t!', 'warning'); return; }
+  if (typeof XLSX === 'undefined') { toast('Th\u01b0 vi\u1ec7n xu\u1ea5t file ch\u01b0a s\u1eb5n s\u00e0ng, th\u1eed l\u1ea1i!', 'error'); return; }
   const rows = DB.students.map(s => ({
     'M\u00e3 H\u1ecdc Vi\u00ean': s.id,
     'H\u1ecd v\u00e0 T\u00ean': s.name,
@@ -787,6 +787,7 @@ function importStudentsExcel(e) {
   const file = e.target.files[0];
   if (!file) return;
   const isCsv = file.name.endsWith('.csv');
+  if (!isCsv && typeof XLSX === 'undefined') { toast('Th\u01b0 vi\u1ec7n ch\u01b0a s\u1eb5n s\u00e0ng, h\u00e3y d\u00f9ng file CSV!', 'error'); e.target.value=''; return; }
   const reader = new FileReader();
   reader.onload = ev => {
     try {
