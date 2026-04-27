@@ -36,11 +36,24 @@ function formatDate(d) { if (!d) return ''; const p = d.split('-'); return p[2]+
 function genStudentId(name, classId) {
   const parts = name.trim().split(/\s+/);
   const lastName = parts[parts.length - 1];
-  const noAccent = lastName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toUpperCase();
+  const noAccent = lastName.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/gi,'d').toUpperCase();
   const base = `${noAccent}-${classId}`;
-  const existing = new Set(DB.students.map(s => s.id));
+  const usedNums = new Set(DB.students.map(s => {
+    const p = s.id.split('-');
+    return parseInt(p[p.length - 1]);
+  }).filter(n => !isNaN(n)));
+  let digits = 3;
   let num;
-  do { num = Math.floor(Math.random() * 900) + 100; } while (existing.has(`${base}-${num}`));
+  while (true) {
+    const min = Math.pow(10, digits - 1);
+    const max = Math.pow(10, digits) - 1;
+    const available = (max - min + 1) - [...usedNums].filter(n => n >= min && n <= max).length;
+    if (available > 0) {
+      do { num = Math.floor(Math.random() * (max - min + 1)) + min; } while (usedNums.has(num));
+      break;
+    }
+    digits++;
+  }
   return `${base}-${num}`;
 }
 
