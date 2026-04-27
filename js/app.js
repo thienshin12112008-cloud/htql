@@ -1,4 +1,4 @@
-// ===== AUTH CHECK =====
+﻿// ===== AUTH CHECK =====
 if (sessionStorage.getItem('auth') !== 'admin') location.href = 'login.html';
 
 // ===== ROUTER =====
@@ -169,7 +169,10 @@ function students() {
     <div class="card">
       <div class="card-header">
         <div class="card-title"><i class="fas fa-user-graduate"></i> Danh Sách Học Viên</div>
-        <button class="btn btn-primary" id="btnAddStudent"><i class="fas fa-plus"></i> Thêm học viên</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="btnAddStudent"><i class="fas fa-plus"></i> Thêm học viên</button>
+          <button class="btn btn-danger" id="btnClearStudents"><i class="fas fa-trash-alt"></i> Xóa tất cả</button>
+        </div>
       </div>
       <div class="toolbar">
         <div class="search-box"><i class="fas fa-search"></i><input type="text" placeholder="Tìm theo tên, mã, SĐT..." id="searchStudent" value="${filter}"/></div>
@@ -195,6 +198,11 @@ function students() {
       </div>
     </div>`;
     document.getElementById('btnAddStudent').onclick = () => addStudentModal();
+    document.getElementById('btnClearStudents').onclick = () => {
+      confirmDelete('X\u00f3a to\u00e0n b\u1ed9 h\u1ecdc vi\u00ean? H\u00e0nh \u0111\u1ed9ng n\u00e0y kh\u00f4ng th\u1ec3 ho\u00e0n t\u00e1c!', () => {
+        DB.students = []; saveDB(); toast('X\u00f3a to\u00e0n b\u1ed9 h\u1ecdc vi\u00ean th\u00e0nh c\u00f4ng!', 'warning'); render();
+      });
+    };
     document.getElementById('searchStudent').oninput = e => { filter = e.target.value.toLowerCase(); render(); };
     document.getElementById('btnExportExcel').onclick = () => exportStudentsExcel();
     document.getElementById('importExcel').onchange = e => importStudentsExcel(e);
@@ -224,7 +232,7 @@ function students() {
               <td>${cl?.name||r.classId}</td>
               <td>${formatDate(r.date)}</td>
               <td style="color:#10b981;font-weight:700">${formatCurrency(r.amount)}</td>
-              <td>${r.discountCode?`<span class="badge badge-primary">${r.discountCode}</span>`:'—'}</td>
+              <td>${r.discountCode?"<span class=\"badge badge-primary\">"+r.discountCode+"</span>":'—'}</td>
               <td><span class="badge ${badge}">${status}</span></td>
             </tr>`;
           }).join('')}</tbody>
@@ -459,8 +467,11 @@ function receipts() {
     c.innerHTML = `
     <div class="card">
       <div class="card-header">
-        <div class="card-title"><i class="fas fa-receipt"></i> Biên Lai Đăng Ký</div>
-        <button class="btn btn-primary" id="btnAddReceipt"><i class="fas fa-plus"></i> Tạo biên lai</button>
+        <div class="card-title"><i class="fas fa-receipt"></i> Bi\u00ean Lai \u0110\u0103ng K\u00fd</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="btnAddReceipt"><i class="fas fa-plus"></i> T\u1ea1o bi\u00ean lai</button>
+          <button class="btn btn-success" id="btnBulkReceipt"><i class="fas fa-layer-group"></i> T\u1ea1o h\u00e0ng lo\u1ea1t</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
@@ -472,7 +483,7 @@ function receipts() {
             <td>${r.studentName}</td>
             <td>${r.studentId}</td>
             <td>${getClassById(r.classId)?.name||r.classId}</td>
-            <td>${r.discountCode?`<span class="badge badge-primary">${r.discountCode}</span>`:'—'}</td>
+            <td>${r.discountCode?"<span class=\"badge badge-primary\">"+r.discountCode+"</span>":'—'}</td>
             <td style="color:#10b981;font-weight:700">${formatCurrency(r.amount)}</td>
             <td>${r.note||'—'}</td>
             <td><div class="action-btns">
@@ -485,6 +496,7 @@ function receipts() {
       </div>
     </div>`;
     document.getElementById('btnAddReceipt').onclick = () => addReceiptModal();
+    document.getElementById('btnBulkReceipt').onclick = () => bulkReceiptModal();
   }
   render();
 
