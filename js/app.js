@@ -471,6 +471,7 @@ function receipts() {
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" id="btnAddReceipt"><i class="fas fa-plus"></i> T\u1ea1o bi\u00ean lai</button>
           <button class="btn btn-success" id="btnBulkReceipt"><i class="fas fa-layer-group"></i> T\u1ea1o h\u00e0ng lo\u1ea1t</button>
+          <button class="btn btn-danger" id="btnClearReceipts"><i class="fas fa-trash-alt"></i> X\u00f3a t\u1ea5t c\u1ea3</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -497,6 +498,11 @@ function receipts() {
     </div>`;
     document.getElementById('btnAddReceipt').onclick = () => addReceiptModal();
     document.getElementById('btnBulkReceipt').onclick = () => bulkReceiptModal();
+    document.getElementById('btnClearReceipts').onclick = () => {
+      confirmDelete('X\u00f3a to\u00e0n b\u1ed9 bi\u00ean lai? H\u00e0nh \u0111\u1ed9ng n\u00e0y kh\u00f4ng th\u1ec3 ho\u00e0n t\u00e1c!', () => {
+        DB.receipts = []; saveDB(); toast('X\u00f3a to\u00e0n b\u1ed9 bi\u00ean lai th\u00e0nh c\u00f4ng!', 'warning'); render();
+      });
+    };
   }
   render();
 
@@ -535,6 +541,77 @@ function receipts() {
       DB.receipts.splice(DB.receipts.findIndex(x=>x.id===id), 1);
       toast('Đã xóa biên lai!', 'warning'); render();
     });
+  };
+
+  function bulkReceiptModal() {
+    if (!DB.classes.length) { toast('Ch\u01b0a c\u00f3 l\u1edbp n\u00e0o!', 'error'); return; }
+    openModal('T\u1ea1o bi\u00ean lai h\u00e0ng lo\u1ea1t', `
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="form-group"><label>Ch\u1ecdn l\u1edbp *</label>
+          <select id="bulk_class" onchange="updateBulkPreview()" style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none">
+            ${DB.classes.map(cl=>`<option value="${cl.id}" data-fee="${cl.fee||0}">${cl.name} (${getStudentsByClass(cl.id).length} h\u1ecdc vi\u00ean)</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label>Ng\u00e0y t\u1ea1o</label>
+          <input type="date" id="bulk_date" value="${new Date().toISOString().split('T')[0]}" style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none"/>
+        </div>
+        <div class="form-group"><label>M\u00e3 gi\u1ea3m gi\u00e1 (t\u00f9y ch\u1ecdn)</label>
+          <input id="bulk_discount" placeholder="Nh\u1eadp m\u00e3..." oninput="updateBulkPreview()" style="text-transform:uppercase;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;width:100%;outline:none"/>
+        </div>
+        <div id="bulk_preview" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:14px 16px;font-size:.9rem"></div>
+      </div>`, () => {
+      const cid = document.getElementById('bulk_class').value;
+      const date = document.getElementById('bulk_date').value;
+      const dcode = document.getElementById('bulk_discount').value.trim().toUpperCase();
+      const cl = getClassById(cid);
+      const students = getStudentsByClass(cid);
+      if (!students.length) { toast('L\u1edbp n\u00e0y ch\u01b0a c\u00f3 h\u1ecdc vi\u00ean!', 'error'); return false; }
+      let fee = cl?.fee || 0;
+      if (dcode) {
+        const disc = DB.discounts.find(x=>x.code===dcode && x.active);
+        if (disc) {
+          fee = disc.type==='percent' ? Math.round(fee*(1-disc.value/100)) : Math.max(0, fee-disc.value);
+          disc.usedCount = (disc.usedCount||0) + students.length;
+          if (disc.maxUse>0 && disc.usedCount>=disc.maxUse) disc.active=false;
+        }
+      }
+      students.forEach(s => {
+        DB.receipts.push({ id: genId('BL',DB.receipts), date, studentName: s.name, studentId: s.id, classId: cid, amount: fee, discountCode: dcode||null, note: '' });
+      });
+      toast('T\u1ea1o ' + students.length + ' bi\u00ean lai th\u00e0nh c\u00f4ng!');
+      render(); return true;
+    });
+    setTimeout(() => updateBulkPreview(), 50);
+  }
+
+  window.updateBulkPreview = () => {
+    const sel = document.getElementById('bulk_class');
+    if (!sel) return;
+    const cid = sel.value;
+    const cl = getClassById(cid);
+    const students = getStudentsByClass(cid);
+    const dcode = (document.getElementById('bulk_discount')?.value||'').trim().toUpperCase();
+    let fee = cl?.fee || 0;
+    let discInfo = '';
+    if (dcode) {
+      const disc = DB.discounts.find(x=>x.code===dcode && x.active);
+      if (disc) {
+        const before = fee;
+        fee = disc.type==='percent' ? Math.round(fee*(1-disc.value/100)) : Math.max(0, fee-disc.value);
+        discInfo = ' <span style="color:#10b981">(-'+formatCurrency(before-fee)+')</span>';
+      } else if (dcode) {
+        discInfo = ' <span style="color:#ef4444">M\u00e3 kh\u00f4ng h\u1ee3p l\u1ec7</span>';
+      }
+    }
+    const preview = document.getElementById('bulk_preview');
+    if (preview) preview.innerHTML = `
+      <div style="font-weight:700;color:#166534;margin-bottom:8px"><i class="fas fa-info-circle"></i> X\u00e1c nh\u1eadn t\u1ea1o h\u00e0ng lo\u1ea1t</div>
+      <div style="display:flex;flex-direction:column;gap:6px;color:#15803d">
+        <div>L\u1edbp: <b>${cl?.name||cid}</b></div>
+        <div>S\u1ed1 h\u1ecdc vi\u00ean: <b>${students.length}</b></div>
+        <div>H\u1ecdc ph\u00ed m\u1ed7i bi\u00ean lai: <b>${formatCurrency(fee)}</b>${discInfo}</div>
+        <div>T\u1ed5ng thu: <b>${formatCurrency(fee*students.length)}</b></div>
+      </div>`;
   };
 
   function addReceiptModal() {
